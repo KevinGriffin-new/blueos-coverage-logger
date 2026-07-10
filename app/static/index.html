@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Coverage Logger</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/vendor/leaflet.css">
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #map { position: absolute; inset: 0; }
+    #panel {
+      position: absolute; top: 10px; right: 10px; z-index: 1000;
+      background: rgba(255,255,255,.95); border-radius: 8px; padding: 10px 14px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.3); font-size: 13px; min-width: 230px;
+    }
+    #panel h1 { font-size: 14px; margin: 0 0 6px; }
+    #panel table { border-spacing: 0 2px; }
+    #panel td:first-child { color: #555; padding-right: 10px; }
+    #panel .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+                  margin-right: 5px; background: #c33; }
+    #panel .dot.ok { background: #2a2; }
+    #panel .row { margin-top: 8px; display: flex; gap: 6px; }
+    #panel button, #panel label.btn {
+      font-size: 12px; padding: 3px 8px; border: 1px solid #bbb; border-radius: 5px;
+      background: #f4f4f4; cursor: pointer;
+    }
+    #panel input[type=file] { display: none; }
+    .legend { margin-top: 8px; }
+    .legend span { display: inline-block; width: 11px; height: 11px; margin-right: 4px;
+                   vertical-align: -1px; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <h1><span id="conn" class="dot"></span>Coverage Logger</h1>
+    <table>
+      <tr><td>Sonar</td><td id="sonar">–</td></tr>
+      <tr><td>Depth</td><td id="depth">–</td></tr>
+      <tr><td>Fixes</td><td id="fixes">–</td></tr>
+      <tr><td>Covered</td><td id="covered">–</td></tr>
+    </table>
+    <div class="legend">
+      <span style="background:#1565c0"></span>track&nbsp;
+      <span style="background:rgba(46,125,50,.55)"></span>coverage&nbsp;
+      <span style="background:rgba(198,40,40,.55)"></span>holidays
+    </div>
+    <div class="row">
+      <label class="btn">Load plan<input type="file" id="plan" accept=".geojson,.json"></label>
+      <button id="clear">Clear track</button>
+      <button id="follow" title="Keep map centred on vehicle">Follow: on</button>
+    </div>
+  </div>
+
+  <script src="/static/vendor/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([59.5945, 9.6708], 15);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap (tiles need internet; layers work without)'
+    }).addTo(map);
+
+    let layers = { track: null, coverage: null, holidays: null };
+    let boat = null, follow = true, fitted = false;
+
+    const styles = {
+      track:    { color: '#1565c0', weight: 2 },
+      coverage: { color: '#2e7d32', weight: 0, fillColor: '#2e7d32', fillOpacity: .45 },
+      holidays: { color: '#c62828', weight: 1, fillColor: '#c62828', fillOpacity: .45 },
+    };
+
+    async function refresh() {
+      try {
+        const st = await (await fetch('api/status')).json();
+        document.getElementById('conn').className = 'dot' + (st.connected ? ' ok' : '');
+        document.getElementById('sonar').textContent =
+          `${st.sonar_model} (${st.beam_deg}° beam)`;
+        document.getElementById('depth').textContent =
+          st.depth_m ? st.depth_m.toFixed(1) + ' m' : '–';
+        document.getElementById('fixes').textContent = st.fix_count;
+
+        const fc = await (await fetch('api/coverage.geojson')).json();
+        for (const f of fc.features) {
+          const kind = f.properties.kind;
+          if (layers[kind]) map.removeLayer(layers[kind]);
+          layers[kind] = L.geoJSON(f, { style: styles[kind] }).addTo(map);
+          if (kind === 'holidays' && f.properties.covered_pct != null)
+            document.getElementById('covered').textContent = f.properties.covered_pct + ' %';
+          else if (kind === 'coverage' && document.getElementById('covered').textContent === '–')
+            document.getElementById('covered').textContent =
+              (f.properties.area_m2 / 10000).toFixed(2) + ' ha';
+        }
+        if (layers.track) {
+          const coords = fc.features[0].geometry.coordinates;
+          const last = coords[coords.length - 1];
+          if (last) {
+            const ll = [last[1], last[0]];
+            if (!boat) boat = L.circleMarker(ll, { radius: 6, color: '#000', fillColor: '#ff0', fillOpacity: 1 }).addTo(map);
+            boat.setLatLng(ll);
+            if (!fitted) {
+              // invalidateSize first: fitting before the container has its
+              // layout size makes Leaflet compute zoom 0 (whole-world view)
+              map.invalidateSize();
+              map.fitBounds(layers.track.getBounds().pad(0.3), { maxZoom: 17 });
+              fitted = map.getZoom() > 2;
+            } else if (follow) {
+              map.panTo(ll, { animate: false });
+            }
+          }
+        }
+      } catch (e) { document.getElementById('conn').className = 'dot'; }
+      setTimeout(refresh, 2000);
+    }
+
+    document.getElementById('plan').addEventListener('change', async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const r = await fetch('api/plan', { method: 'POST', body: await file.text() });
+      if (!r.ok) alert('Plan rejected: ' + (await r.json()).detail);
+      ev.target.value = '';
+    });
+    document.getElementById('clear').addEventListener('click', async () => {
+      if (confirm('Clear the logged track?')) await fetch('api/track', { method: 'DELETE' });
+      fitted = false;
+    });
+    document.getElementById('follow').addEventListener('click', (ev) => {
+      follow = !follow;
+      ev.target.textContent = 'Follow: ' + (follow ? 'on' : 'off');
+    });
+
+    refresh();
+  </script>
+</body>
+</html>

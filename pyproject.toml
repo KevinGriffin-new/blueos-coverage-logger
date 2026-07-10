@@ -1,0 +1,23 @@
+[project]
+name = "blueos-coverage-logger"
+version = "0.1.0"
+description = "BlueOS extension: survey coverage logger with live swath-footprint map and gap flags"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "httpx>=0.27",
+]
+
+# Virtual project: the app ships as files under /srv/app in the container,
+# not as an installed package. No build system on purpose.
+[tool.uv]
+package = false
