@@ -1,6 +1,6 @@
 [project]
 name = "blueos-coverage-logger"
-version = "0.1.0"
+version = "0.2.0"
 description = "BlueOS extension: survey coverage logger with live swath-footprint map and gap flags"
 license = "MIT"
 requires-python = ">=3.11"
@@ -9,6 +9,7 @@ dependencies = [
     "uvicorn>=0.30",
     "shapely>=2.0",
     "pyproj>=3.6",
+    "bluerobotics-ping>=0.2.4",
 ]
 
 [dependency-groups]

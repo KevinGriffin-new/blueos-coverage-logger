@@ -18,7 +18,7 @@ COPY app /srv/app
 ENV DATA_DIR=/data
 EXPOSE 8000/tcp
 
-LABEL version="0.1.0"
+LABEL version="0.2.0"
 LABEL permissions='\
 {\
   "ExposedPorts": {\

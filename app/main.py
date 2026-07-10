@@ -21,7 +21,7 @@ from .sonar import make_adapter
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 STATIC = Path(__file__).parent / "static"
 
 sonar = make_adapter()

@@ -40,11 +40,24 @@ desktop/SITL rigs).
 - **Position**: polls MAVLink2Rest (`GLOBAL_POSITION_INT`) at 2 Hz via
   `host.docker.internal:6040` — correct on real (host-networked) BlueOS and
   on Docker Desktop dev setups alike. Override with `MAV2REST_URL`.
-- **Depth / swath**: a pluggable `SonarAdapter` selected by `SONAR_MODEL`.
-  `mock` (default) simulates a slow swell around `MOCK_DEPTH_M` (default
-  10 m) with `MOCK_BEAM_DEG` (default 25°, the Blue Robotics Ping2 beam) —
-  full demos work against SITL with no sonar hardware. Real adapters (Ping2
-  via ping-python, etc.) plug in behind the same interface.
+- **Depth / swath**: a pluggable `SonarAdapter` selected by `SONAR_MODEL`:
+  - `mock` (default): a slow swell around `MOCK_DEPTH_M` (default 10 m) with
+    `MOCK_BEAM_DEG` (default 25°) — zero dependencies, demos anywhere.
+  - `ping2`: a **Blue Robotics Ping2** over the real Ping protocol
+    (`brping`), UDP at `PING_UDP` — on a boat that's the port BlueOS's ping
+    service bridges the device to (e.g. `host.docker.internal:9090`); low-
+    confidence readings (below `PING_MIN_CONFIDENCE`, default 50 %) are
+    treated as no-data. For development, `app/ping2_sim.py` is a simulated
+    Ping2 that answers `brping` byte-for-byte like the device (both request
+    dialects) and computes depth from a synthetic seabed evaluated at the
+    vehicle's live SITL position — so the same adapter code that will talk
+    to real hardware is exercised end-to-end, and swath width varies
+    spatially like a real survey:
+
+    ```bash
+    uv run python -m app.ping2_sim --port 9110   # beside SITL + BlueOS
+    SONAR_MODEL=ping2 PING_UDP=127.0.0.1:9110 uv run uvicorn app.main:app
+    ```
 - **Coverage**: each track segment is buffered to its local swath width
   (`2 · depth · tan(beam/2)`) in a survey-area-centred transverse-Mercator
   frame; the union is the coverage polygon; plan − coverage = holidays.

@@ -45,14 +45,62 @@ class MockAdapter:
         return self.base_depth_m * (1.0 + 0.15 * math.sin(t / 30.0))
 
 
-# model name -> (adapter factory, full beam angle)
+class Ping2Adapter:
+    """Blue Robotics Ping2 over the Ping protocol (UDP), via brping.
+
+    Works against the real device (BlueOS's ping service bridges it to a UDP
+    port on the vehicle) and against app.ping2_sim identically. ``PING_UDP``
+    is ``host:port``; on a real boat something like
+    ``host.docker.internal:9090``, in SITL dev ``127.0.0.1:9110``.
+
+    Depth readings below ``min_confidence`` (device-reported, %) are treated
+    as no-data rather than logged as bogus swath widths.
+    """
+
+    model = "ping2"
+    beam_deg = 25.0  # Blue Robotics datasheet full beamwidth
+
+    def __init__(self, udp: str, min_confidence: int = 50) -> None:
+        from brping import Ping1D  # imported here: hardware adapters stay optional
+
+        host, _, port = udp.partition(":")
+        self._ping = Ping1D()
+        self._ping.connect_udp(host, int(port or 9110))
+        self.min_confidence = min_confidence
+        self._initialized = self._try_initialize()
+
+    def _try_initialize(self) -> bool:
+        try:
+            return bool(self._ping.initialize())
+        except OSError:  # e.g. ConnectionRefusedError: nothing at that port yet
+            return False
+
+    def depth_m(self) -> float | None:
+        if not self._initialized:
+            self._initialized = self._try_initialize()  # device may come up late
+            if not self._initialized:
+                return None
+        try:
+            data = self._ping.get_distance()
+        except OSError:
+            self._initialized = False  # device went away; re-handshake next poll
+            return None
+        if not data or data.get("confidence", 0) < self.min_confidence:
+            return None
+        return data["distance"] / 1000.0
+
+
+# model name -> adapter factory
 _ADAPTERS = {
     "mock": lambda: MockAdapter(
         base_depth_m=float(os.environ.get("MOCK_DEPTH_M", "10")),
         beam_deg=float(os.environ.get("MOCK_BEAM_DEG", "25")),
     ),
-    # "ping2": Ping2Adapter (beam 25°, ping-python) — needs hardware, Phase 3
-    # "s500": S500Adapter (beam 5°) — needs hardware, Phase 3
+    "ping2": lambda: Ping2Adapter(
+        udp=os.environ.get("PING_UDP", "127.0.0.1:9110"),
+        min_confidence=int(os.environ.get("PING_MIN_CONFIDENCE", "50")),
+    ),
+    # "s500": S500Adapter (beam 5°) — needs hardware or a Cerulean sim, later
 }
 
 
