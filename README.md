@@ -14,6 +14,27 @@ Companion to [survey-grid](https://github.com/KevinGriffin-new/survey-grid),
 which generates the mission the boat runs; this extension shows whether the
 boat actually covered what was planned.
 
+![Live coverage demo: SITL BlueBoat running a survey-grid mission](docs/demo.gif)
+
+*A simulated BlueBoat (ArduPilot SITL) running a
+[survey-grid](https://github.com/KevinGriffin-new/survey-grid) mission at 10×
+speed. Green: actual ensonified coverage (mock Ping2, 25° beam, ~10 m depth ⇒
+~4.4 m swath). Red: holidays — the 20 m line spacing this mission used leaves
+~75 % of the plan uncovered, which is exactly the case for swath-derived
+spacing.*
+
+## Install on BlueOS
+
+BlueOS web UI → **Extensions** → **Installed** → **+** (manual install):
+
+- Identifier: `kevingriffin.coverage_logger`
+- Name: `coverage-logger`
+- Docker image: `dzigavertov/blueos-coverage-logger`, tag `0.1.0`
+- Permissions/settings are read from the image labels.
+
+Multi-arch (`linux/arm64` for the BlueBoat's Pi, `linux/amd64` for
+desktop/SITL rigs).
+
 ## How it works
 
 - **Position**: polls MAVLink2Rest (`GLOBAL_POSITION_INT`) at 2 Hz via
